@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
 use std::io::{self, Write};
@@ -11,24 +10,23 @@ fn read_config_file() -> Result<String, io::Error> {
     Ok(s)
 }
 
-fn get_config() -> HashMap<String, String> {
-    let mut config: HashMap<String, String> = HashMap::new();
+fn get_url(account: String, repo: String) -> String {
+    let separator: &str = " ";
+    let mut url: String = String::from("");
     match read_config_file() {
         Ok(config_file) => {
-            let config_parts: Vec<&str> = config_file.split("#repos").collect();
-            let root: Vec<&str> = config_parts[0].split("\n").collect();
-            let mut repos: Vec<&str> = config_parts[1].split("\n").collect();
-
-            repos.remove(0);
-
-            for repo in repos.iter() {
-                let key_and_value: Vec<&str> = repo.split(":").collect();
-                config.insert(key_and_value[0].to_string(), key_and_value[1].to_string());
+            let rows: Vec<&str> = config_file.split("\n").collect();
+            for config in rows.iter() {
+                let config_data: Vec<&str> = config.split(separator).collect();
+                if account == config_data[0] && repo == config_data[1] {
+                    url.push_str(config_data[2]);
+                    url.push_str(config_data[3]);
+                    return url;
+                }
             }
-            config.insert("root".to_string(), root[1].to_string());
-            config
+            url
         }
-        Err(_) => HashMap::new(),
+        Err(_) => "".to_string(),
     }
 }
 
@@ -51,21 +49,16 @@ fn on_add_repo() {
 }
 
 fn main() {
-    let repo_or_command = std::env::args().nth(1).expect("no command or repo given");
+    let root_or_command = std::env::args().nth(1).expect("no command or root given");
 
-    if repo_or_command == "add-repo".to_string() {
+    if root_or_command == "add-repo".to_string() {
         on_add_repo();
         std::process::exit(0x0010);
     }
 
-    let config = get_config();
-    let root = config
-        .get("root")
-        .expect("Config file corrupted. Run config reset");
+    let repo = std::env::args().nth(2).expect("no repo given");
 
-    let repo = config.get(&repo_or_command).expect("Unknown repo");
-
-    let url = format!("{}{}", root, repo);
+    let url = get_url(root_or_command, repo);
     println!("url {:?}", url);
     let output = Command::new("open")
         .args(&[&url])
