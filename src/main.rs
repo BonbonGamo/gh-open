@@ -5,14 +5,19 @@ use std::process::Command;
 
 static SEPARATOR: &str = " ";
 static ACCOUNT_ROW_MARK: &str = "__account";
+static CONFIG_PATH: &str = "config.txt";
 
 fn exit_with_message(message: &str) {
     println!("{}", message);
     std::process::exit(0x0010);
 }
 
+fn get_arg(index: usize, error_message: &str) -> String {
+    std::env::args().nth(index).expect(error_message)
+}
+
 fn read_config_file() -> Result<String, io::Error> {
-    let mut f = File::open("config.txt")?;
+    let mut f = File::open(CONFIG_PATH)?;
     let mut s = String::new();
     f.read_to_string(&mut s)?;
     Ok(s)
@@ -50,7 +55,7 @@ fn add_to_config(row: String) -> Result<(), io::Error> {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true) // This is needed to append to file
-        .open("config.txt")
+        .open(CONFIG_PATH)
         .unwrap();
 
     file.write_all(row.as_bytes())?;
@@ -60,7 +65,32 @@ fn add_to_config(row: String) -> Result<(), io::Error> {
 fn on_add_repo() {
     let repo_name: String = std::env::args().nth(2).expect("no repo name given");
     let repo_target: String = std::env::args().nth(3).expect("no repo target given");
-    let row = format!("\n{} {}", repo_name, repo_target);
+    let row = format!("\n{}{}{}", repo_name, SEPARATOR, repo_target);
+    add_to_config(row).expect("Could not write");
+}
+
+fn validate_account_name_and_url() {
+    let config = read_config_file().expect("Config file missing");
+    let rows: Vec<&str> = config.split("\n").collect();
+    let name = get_arg(2, "No name for account provided");
+    let url = get_arg(3, "No url for account provided");
+    for row in rows.iter() {
+        let row_data: Vec<&str> = row.split(SEPARATOR).collect();
+        if row_data[0] == ACCOUNT_ROW_MARK && (row_data[1] == name) {
+            let msg = format!("Account name {} is already taken", name);
+            exit_with_message(&msg)
+        }
+        if row_data[0] == ACCOUNT_ROW_MARK && (row_data[2] == url) {
+            let msg = format!("Account with url {} exists with name {}", url, row_data[1]);
+            exit_with_message(&msg)
+        }
+    }
+}
+
+fn on_add_account() {
+    let account_name: String = get_arg(2, "No account name provided");
+    let account_target: String = get_arg(3, "No github account URL provided");
+    let row = format!("\n{}{}{}", account_name, SEPARATOR, account_target);
     add_to_config(row).expect("Could not write");
 }
 
@@ -72,15 +102,20 @@ fn main() {
         exit_with_message("Repository added!");
     }
 
+    if root_or_command == "add-account".to_string() {
+        validate_account_name_and_url();
+        on_add_account();
+        exit_with_message("Account added")
+    }
+
     let repo = std::env::args().nth(2).expect("no repo given");
 
     let url = get_url(root_or_command, repo);
-    println!("url {:?}", url);
 
     let output = Command::new("open")
         .args(&[&url])
         .output()
         .expect("failed to execute process");
 
-    println!("root {:?}", output.stdout);
+    println!("Opening Github: {}", output.stdout[0]);
 }
